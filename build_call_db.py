@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-"""This file attempts to build up an api definition document that OCL can use.
+"""This file builds up an intermediate database of the calls.
 
 It parses the list of calls output by parse_logs.py and uses the Nova API
 to match them to controllers.
@@ -47,34 +47,6 @@ def apirouter(server, v='/v2'):
   v_ref = server.app[(None, v)]
   apirouter = v_ref.application.application.application.application
   return apirouter
-
-
-def to_schema(name, raw):
-  if type(raw) == type({}):
-    o = {'name': name,
-         'type': 'object',
-         'properties': {}
-         }
-    props = o['properties']
-    for k, v in raw.iteritems():
-      props[k] = to_schema(k, v)
-  elif type(raw) in (type(tuple()), type([])):
-    o = {'type': 'array',
-         'items': to_schema(name, raw[0])}
-  elif type(raw) == str or type(raw) == unicode:
-    o = {'type': 'string'}
-  elif type(raw) == int:
-    o = {'type': 'integer'}
-  elif type(raw) == float:
-    o = {'type': 'float'}
-  elif type(raw) == bool:
-    o = {'type': 'bool'}
-  elif raw is None:
-    o = {'type': 'null'}
-  else:
-    print name, raw
-    return None
-  return o
 
 
 def build_call_db(calls, router):
@@ -126,14 +98,16 @@ def build_call_db(calls, router):
 
 def _normalize_controller_name(controller):
   """For now just replace dots."""
-  class_name = controller.__module__
+  module_name = controller.__module__
 
-  if class_name.startswith('nova.api.openstack.compute.contrib'):
-    class_name = '.'.join(class_name.split('.')[5:])
-  elif class_name.startswith('nova.api.openstack.compute'):
-    class_name = '.'.join(class_name.split('.')[4:])
+  if module_name.startswith('nova.api.openstack.compute.contrib'):
+    module_name = '.'.join(module_name.split('.')[5:])
+  elif module_name.startswith('nova.api.openstack.compute'):
+    module_name = '.'.join(module_name.split('.')[4:])
+  elif module_name.startswith('nova.api.openstack'):
+    module_name = '.'.join(module_name.split('.')[3:])
 
-  return class_name.replace('.', '_')
+  return module_name.replace('.', '_'), controller.__class__.__name__
 
 
 def match_route(method, path, qs, router):
@@ -152,7 +126,7 @@ def match_route(method, path, qs, router):
 def normalize_call(call, match, route):
   call = dict([(str(k), str(v)) for k, v in call.iteritems()])
   controller = match['controller'].controller
-  class_name = _normalize_controller_name(controller)
+  module_name, class_name = _normalize_controller_name(controller)
 
   body = call['body']
   if call['content_type'] == 'json':
@@ -165,17 +139,17 @@ def normalize_call(call, match, route):
   action = match['action']
   if action == 'index':
     real_action = 'list'
-    name = 'list_%s' % (class_name,)
+    name = 'list_%s' % (module_name,)
   elif action == 'detail':
     real_action = 'list_detail'
-    name = 'list_%s_detail' % (class_name,)
+    name = 'list_%s_detail' % (module_name,)
   elif action == 'action':
     # The real action is the only key in the top-level dict
     real_action = body.keys()[0]
-    name = '%s_%s' % (real_action, class_name)
+    name = '%s_%s' % (real_action, module_name)
   else:
     real_action = action
-    name = '%s_%s' % (action, class_name)
+    name = '%s_%s' % (action, module_name)
 
   route_params = [(k, v) for k, v in match.iteritems()
                   if k not in ('action', 'controller')]
@@ -186,6 +160,8 @@ def normalize_call(call, match, route):
        'route_params': route_params,
        'real_action': real_action,
        'name': name,
+       'raw_module': controller.__module__,
+       'module_name': module_name,
        'class_name': class_name}
   call.update(o)
   return call
