@@ -48,57 +48,41 @@ if __name__ == '__main__':
   import pprint
   pprint.pprint(calls)
 
-  # Some random stats
-  total_calls_num = len(calls['calls'].keys())
-  action_calls = [x for x in calls['calls'].values()
-                  if x[0]['action'] == 'action']
-  action_calls_num = len(action_calls)
-  action_calls_percent = '%.2f' % ((float(action_calls_num) / float(total_calls_num)) * 100)
+  create_servers = calls['calls']['create_servers']
 
-  camel_calls = [x for x in calls['calls'].keys()
-                 if UPPERCASE.search(x)]
-  camel_calls_num = len(camel_calls)
-  camel_calls_percent = '%.2f' % ((float(camel_calls_num) / float(total_calls_num)) * 100)
+  params_all = set()
+  params_req = set()
+  call_count = 0
+  calls_with_param = {}
 
+  print
+  print
+  print
+  print "Scanning tests"
+  first = True
+  for call in create_servers:
+    call_count += 1
+    call_params = set(call['body']['server'].keys())
+    params_all = params_all | call_params
+    if first:
+      params_req = params_req | call_params
+      first = False
 
-  # Module only has "Controller" class
-  controller_only_calls = [x for x in calls['calls'].values()
-                           if x[0]['class_name'] == 'Controller']
+    params_req = params_req & call_params
+    if 'flavorRef' not in call_params:
+      pprint.pprint(call)
+    for param in call_params:
+      count = calls_with_param.get(param, 0)
+      count += 1
+      calls_with_param[param] = count
 
-  # Controller Endswith Controller
-  controller_endswith_calls = [x for x in calls['calls'].values()
-                               if x[0]['class_name'].endswith('Controller')]
-  not_controller_endswith_calls = [
-      x[0] for x in calls['calls'].values()
-      if not x[0]['class_name'].endswith('Controller')]
-
-  # Figure out which module, and how many, have multiple controllers
-  multiple_controller_calls = {}
-  module_controllers = {}
-  for call in calls['calls'].values():
-    m_set = module_controllers.get(call[0]['module_name'], set())
-    for inst in call:
-      m_set.add(inst['class_name'])
-    module_controllers[call[0]['module_name']] = m_set
-
-  for module, m_set in module_controllers.iteritems():
-    count_list = multiple_controller_calls.get(str(len(m_set)), [])
-    count_list.append(module)
-    multiple_controller_calls[str(len(m_set))] = count_list
-
-
-  print 'Total calls:', total_calls_num
-  print 'Action calls: %s (%s%%)' % (action_calls_num,
-                                     action_calls_percent)
-
-  print 'camelCase calls: %s (%s%%)' % (camel_calls_num,
-                                        camel_calls_percent)
-  pprint.pprint(camel_calls)
-  print '"Controller" only:', len(controller_only_calls)
-  print 'Endswith "Controller":', len(controller_endswith_calls)
-  print 'Not endswith "Controller:'
-  pprint.pprint(not_controller_endswith_calls)
-  print 'Number of controllers:'
-  pprint.pprint(multiple_controller_calls)
+  print "All"
+  pprint.pprint(sorted(list(params_all)))
+  print "Required"
+  pprint.pprint(sorted(list(params_req)))
+  print "Optional"
+  pprint.pprint(sorted(list(params_all - params_req)))
+  print 'Calls:', call_count
+  pprint.pprint(calls_with_param)
 
 

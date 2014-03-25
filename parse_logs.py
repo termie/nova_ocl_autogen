@@ -25,29 +25,43 @@ def parse(filepath):
   collecting = False
   current_url = None
   current_collect = []
+  current_test = ''
 
   for line in fp:
     line = line.strip('\n')
+    if line.startswith('test: '):
+      current_test = line[len('test: '):]
+
     if collecting:
       if line.startswith('INFO') or line.startswith('DEBUG'):
         collecting = False
-        o.append((current_url, '\n'.join(current_collect)))
-        current_collect = []
-        current_url = None
+        #o.append((current_url, '\n'.join(current_collect), current_test))
+        #current_collect = []
+        #current_url = None
       else:
         current_collect.append(line)
 
     if line.startswith(CLIENT):
       line = line[len(CLIENT):]
-      if line in ['Doing GET on /v2', 'Doing GET on /v3', 'Doing GET on /']:
-        continue
+      #if line in ['Doing GET on /v2', 'Doing GET on /v3', 'Doing GET on /']:
+      #  continue
       if line.startswith('Doing'):
         current_url = URL_MATCHER.match(line).groups()
-        if current_url[0] in ('GET', 'DELETE', 'HEAD'):
-          o.append((current_url, ''))
+        #if current_url[0] in ('GET', 'DELETE', 'HEAD'):
+        #  o.append((current_url, '', current_test))
       if line.startswith('Body:'):
         current_collect = [line[len('Body: '):]]
         collecting = True
+
+    # We've gotten to the end of a call and it succceeded
+    if '=> code 2' in line:
+      if current_url not in [('GET', '/v2'), ('GET', '/v3'), ('GET', '/')]:
+        o.append((current_url, '\n'.join(current_collect), current_test))
+      current_collect = []
+      current_url = None
+    elif '=> code 4' in line:
+      current_collect = []
+      current_url = None
 
   return o
 
@@ -55,11 +69,12 @@ def parse(filepath):
 def normalize(l):
   """Try to pre-populate as much info about the call as we can."""
   o = []
-  for call, body in l:
+  for call, body, test in l:
     method, path = call
     d = {'method': method,
          'path': path,
-         'body': body}
+         'body': body,
+         'test': test}
 
     if path.startswith('/v2'):
       d['version'] = 'v2'

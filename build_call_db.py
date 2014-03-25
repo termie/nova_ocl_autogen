@@ -99,6 +99,7 @@ def build_call_db(calls, router):
 def _normalize_controller_name(controller):
   """For now just replace dots."""
   module_name = controller.__module__
+  class_name = controller.__class__.__name__
 
   if module_name.startswith('nova.api.openstack.compute.contrib'):
     module_name = '.'.join(module_name.split('.')[5:])
@@ -107,7 +108,26 @@ def _normalize_controller_name(controller):
   elif module_name.startswith('nova.api.openstack'):
     module_name = '.'.join(module_name.split('.')[3:])
 
-  return module_name.replace('.', '_'), controller.__class__.__name__
+
+  # Some special cases for the couple modules where there are multiple
+  # controllers in the same module.
+  # TODO(termie): it would be great not to hard code these special cases
+  #               but it would also be great not to have special cases
+  if module_name == 'floating_ip_dns':
+    if 'Domain' in class_name:
+      module_name = module_name + '.domain'
+    elif 'Entry' in class_name:
+      module_name = module_name + '.entry'
+  if module_name == 'security_groups':
+    if 'Server' in class_name:
+      module_name = module_name + '.server'
+  if module_name == 'volumes':
+    if 'Snapshot' in class_name:
+      module_name = module_name + '.snapshot'
+    if 'Attachment' in class_name:
+      module_name = module_name + '.attachment'
+
+  return module_name.replace('.', '_'), class_name
 
 
 def match_route(method, path, qs, router):
@@ -167,8 +187,16 @@ def normalize_call(call, match, route):
   return call
 
 
+
+# TODO(termie)
+# ( ) deal with multiple controllers in same module (there are only a couple
+#     cases of this)
+
+
 if __name__ == '__main__':
-  calls = json.load(open('calls_from_logs.json'))
+  parsed_logs = sys.argv[1]
+  sys.argv = sys.argv[:1] + sys.argv[2:]
+  calls = json.load(open(parsed_logs))
   server = get_server()
   router = apirouter(server)
   #ar_v3 = apirouter(server, '/v3')
